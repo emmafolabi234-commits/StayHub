@@ -75,13 +75,6 @@ stayhub-backend/
 
 ## Installation
 
-From Windows PowerShell:
-
-```powershell
-cd C:\Users\emman\OneDrive\Desktop\Stayhub\stayhub-backend
-npm install
-```
-
 Generate the Prisma client:
 
 ```powershell
