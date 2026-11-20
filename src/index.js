@@ -36,6 +36,14 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
+app.get('/', (req, res) => {
+  res.json({
+    name: 'StayHub Backend API',
+    status: 'ok',
+    documentation: '/api-docs',
+  });
+});
+
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/guests', guestRouter);

@@ -22,7 +22,7 @@ StayHub is a Node.js REST API for a digital guest experience platform. It provid
 - Express
 - Prisma ORM
 - PostgreSQL
-- Supabase/PostgreSQL hosting support
+- PostgreSQL database support
 - JSON Web Tokens
 - bcryptjs
 - express-validator
@@ -69,18 +69,13 @@ stayhub-backend/
 - Node.js 18 or newer
 - npm
 - A PostgreSQL database
-- Optional: Supabase project for hosted PostgreSQL
+- A PostgreSQL provider of your choice
 - Optional: Paystack sandbox account
 - Optional: SMTP server or MailHog for email testing
 
 ## Installation
 
 From Windows PowerShell:
-
-```powershell
-cd C:\Users\emman\OneDrive\Desktop\Stayhub\stayhub-backend
-npm install
-```
 
 Generate the Prisma client:
 
@@ -103,10 +98,6 @@ JWT_SECRET="replace-with-a-random-secret-at-least-32-characters"
 PAYSTACK_PUBLIC_KEY="pk_test_xxxxxx"
 PAYSTACK_SECRET_KEY="sk_test_xxxxxx"
 
-# Supabase
-SUPABASE_URL="https://YOUR-PROJECT.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"
-
 # Email
 SMTP_HOST="localhost"
 SMTP_PORT=1025
@@ -124,7 +115,11 @@ RATE_LIMIT_MAX=100
 
 The rate limit defaults to 100 requests per 15-minute window per IP. `RATE_LIMIT_WINDOW_MS` is expressed in milliseconds.
 
-Never commit real secrets or service-role keys to source control.
+Never commit real secrets or API keys to source control.
+
+## KYC Document Storage
+
+KYC document upload and storage are not implemented in the current codebase. To avoid paid services, use a private directory on hardware you already own; a self-hosted, open-source object-storage server is another option if you can operate it yourself. Keep uploaded documents outside source control and the public web root, restrict access, encrypt storage and backups, and define a retention/deletion policy appropriate to your legal requirements. Local disk storage is free but requires you to manage backups, access controls, and disk capacity. Do not store identity documents directly in PostgreSQL or expose a public directory.
 
 ## Database Setup
 
@@ -168,55 +163,149 @@ The API listens on `http://localhost:3000` by default.
 
 Useful URLs:
 
-- API root: `http://localhost:3000/api`
+- API status: `http://localhost:3000/`
+- API base path: `http://localhost:3000/api`
 - Swagger UI: `http://localhost:3000/api-docs`
 
 ## API Routes
 
-All routes use JSON request bodies unless otherwise noted. Authenticated routes require:
+Unless noted otherwise, request bodies are JSON. For protected routes, send:
 
 ```text
 Authorization: Bearer <accessToken>
 ```
 
+For local testing, the seed script creates an admin account with the credentials documented in [Database Setup](#database-setup). Its generated IDs vary each time it runs; use IDs returned by API responses or query your local database where an ID is needed. The seed script deletes existing records from its tables before creating sample data.
+
+### Root and Documentation
+
+| Method and route | Inputs | Purpose |
+|---|---|---|
+| `GET /` | None | Returns the API name, status, and documentation path. |
+| `GET /api-docs` | None | Opens Swagger UI. |
+
 ### Authentication
 
-| Method | Route | Access | Description |
+These authentication endpoints are public. Registration creates a staff account and sends a welcome email.
+
+| Method and route | Input | Required? | Source and validation |
 |---|---|---|---|
-| `POST` | `/api/auth/register` | Public | Register a staff account |
-| `POST` | `/api/auth/login` | Public | Log in and receive access and refresh tokens |
-| `POST` | `/api/auth/refresh` | Public | Exchange a refresh token for a new access token |
+| `POST /api/auth/register` | `email` | Required | JSON body; valid email |
+|  | `password` | Required | JSON body; at least 8 characters |
+|  | `role` | Required | JSON body; `ADMIN`, `STAFF`, or `RECEPTIONIST` |
+| `POST /api/auth/login` | `email` | Required | JSON body; valid email |
+|  | `password` | Required | JSON body |
+| `POST /api/auth/refresh` | `refreshToken` | Required | JSON body; valid refresh JWT |
 
-Example login:
+Register example:
 
-```powershell
-curl -X POST "http://localhost:3000/api/auth/login" `
-  -H "Content-Type: application/json" `
-  -d '{\"email\":\"admin@example.com\",\"password\":\"AdminPass!123\"}'
+```json
+{
+  "email": "newstaff@example.com",
+  "password": "StrongPass123!",
+  "role": "STAFF"
+}
 ```
+
+Login example:
+
+```json
+{
+  "email": "admin@example.com",
+  "password": "AdminPass!123"
+}
+```
+
+Refresh example:
+
+```json
+{
+  "refreshToken": "<refreshToken returned by login or register>"
+}
+```
+
+Login and registration return `accessToken` and `refreshToken`. Use the access token in the `Authorization` header for protected endpoints.
 
 ### Guests
 
-| Method | Route | Access | Description |
+Guest creation is public. Profile retrieval and updates require a bearer token; guests may access only their own profile, while staff may access guest profiles.
+
+| Method and route | Input | Required? | Source and validation |
 |---|---|---|---|
-| `POST` | `/api/guests` | Public | Create a guest profile |
-| `GET` | `/api/guests/:id` | Authenticated guest or staff | Get a guest profile |
-| `PUT` | `/api/guests/:id` | Authenticated guest or staff | Update a guest profile |
+| `POST /api/guests` | `firstName` | Required | JSON body; non-empty string |
+|  | `lastName` | Required | JSON body; non-empty string |
+|  | `email` | Required | JSON body; valid email |
+|  | `phone` | Optional | JSON body; string |
+|  | `address` | Optional | JSON body; string |
+| `GET /api/guests/:id` | `id` | Required | URL path parameter; UUID |
+| `PUT /api/guests/:id` | `id` | Required | URL path parameter; UUID |
+|  | `firstName`, `lastName` | Optional | JSON body; strings |
+|  | `email` | Optional | JSON body; valid email |
+|  | `phone`, `address` | Optional | JSON body; strings |
+
+Guest creation example:
+
+```json
+{
+  "firstName": "Jamie",
+  "lastName": "Taylor",
+  "email": "jamie.taylor@example.com",
+  "phone": "555-0101",
+  "address": "10 Main Street"
+}
+```
+
+For `PUT`, send only the fields to change. The route permits an empty body, but at least one field should be supplied to make a useful update.
 
 ### Rooms
 
-| Method | Route | Access | Description |
+Room listing requires a bearer token.
+
+| Method and route | Input | Required? | Source and validation |
 |---|---|---|---|
-| `GET` | `/api/rooms` | Authenticated | List rooms |
-| `GET` | `/api/rooms?checkIn=<ISO date>&checkOut=<ISO date>` | Authenticated | Find rooms without conflicting bookings |
+| `GET /api/rooms` | `checkIn` | Optional | Query parameter; provide together with `checkOut` to search availability |
+|  | `checkOut` | Optional | Query parameter; provide together with `checkIn` |
+
+Example: `GET /api/rooms?checkIn=2026-12-10&checkOut=2026-12-13`. Without both dates, the API lists basic room information. The route currently does not validate query date formats.
 
 ### Bookings
 
-| Method | Route | Access | Description |
+Booking endpoints require a bearer token. A guest may create or retrieve only their own booking; `ADMIN` and `STAFF` can update booking status.
+
+| Method and route | Input | Required? | Source and validation |
 |---|---|---|---|
-| `POST` | `/api/bookings` | Authenticated | Create a booking |
-| `GET` | `/api/bookings/:id` | Authenticated guest or staff | Get a booking |
-| `PATCH` | `/api/bookings/:id/status` | `ADMIN` or `STAFF` | Update booking status |
+| `POST /api/bookings` | `guestId` | Required | JSON body; UUID of an existing guest |
+|  | `roomId` | Required | JSON body; UUID of an existing room |
+|  | `checkIn` | Required | JSON body; ISO 8601 date/time |
+|  | `checkOut` | Required | JSON body; ISO 8601 date/time, later than `checkIn` |
+|  | `promoCode` | Optional | JSON body; string |
+| `GET /api/bookings/:id` | `id` | Required | URL path parameter; UUID |
+| `PATCH /api/bookings/:id/status` | `id` | Required | URL path parameter; UUID |
+|  | `status` | Required | JSON body; `PENDING`, `CONFIRMED`, `CANCELLED`, or `COMPLETED` |
+
+Booking creation example (replace the IDs with real guest and room IDs):
+
+```json
+{
+  "guestId": "<existing-guest-uuid>",
+  "roomId": "<existing-room-uuid>",
+  "checkIn": "2026-12-10T15:00:00.000Z",
+  "checkOut": "2026-12-13T11:00:00.000Z",
+  "promoCode": "WINTER"
+}
+```
+
+For test IDs, create a guest with `POST /api/guests` and copy the returned `id`. Log in to get an access token, then call `GET /api/rooms` with that token and copy a room `id` from its response. Use those IDs for the booking request.
+
+The API calculates the total from the room price and dates; do not send `totalAmountInt` or a booking status when creating a booking.
+
+Status update example:
+
+```json
+{
+  "status": "CONFIRMED"
+}
+```
 
 Booking status values:
 
@@ -229,20 +318,70 @@ COMPLETED
 
 ### Payments
 
-| Method | Route | Access | Description |
-|---|---|---|---|
-| `POST` | `/api/payments/initiate` | Authenticated | Initialize a Paystack transaction |
-| `POST` | `/api/payments/webhook` | Paystack webhook | Verify and process a successful payment event |
+Payment initiation requires a bearer token and permits the booking guest or staff. The webhook is called by Paystack and is authenticated by its signature header rather than a bearer token.
 
-Paystack webhook requests must include a valid `x-paystack-signature` header. The webhook marks matching payments as `SUCCESS` or `FAILED` and confirms the booking on successful payment.
+| Method and route | Input | Required? | Source and validation |
+|---|---|---|---|
+| `POST /api/payments/initiate` | `bookingId` | Required | JSON body; UUID of an existing booking |
+| `POST /api/payments/webhook` | `x-paystack-signature` | Required | HTTP header; must be a valid signature for the exact request body |
+|  | Paystack event object | Required | JSON body; expected fields include `event`, `data.reference`, and `data.status` |
+
+Payment initiation example:
+
+```json
+{
+  "bookingId": "<existing-booking-uuid>"
+}
+```
+
+The webhook expects `event` to be `charge.success` to process a payment. A valid signature must be generated by Paystack using the configured secret key; an unsigned sample request will be rejected. It marks the matching payment as `SUCCESS` or `FAILED` and confirms the booking on success.
+
+Expected webhook JSON shape:
+
+```json
+{
+  "event": "charge.success",
+  "data": {
+    "reference": "<reference returned by payment initiation>",
+    "status": "success"
+  }
+}
+```
+
+This JSON is only the body shape; testing the webhook also requires a valid `x-paystack-signature` for the exact body.
 
 ### Service Requests
 
-| Method | Route | Access | Description |
+Service request endpoints require a bearer token. Guests can list only their own requests; `ADMIN`, `STAFF`, and `RECEPTIONIST` can update request statuses.
+
+| Method and route | Input | Required? | Source and validation |
 |---|---|---|---|
-| `POST` | `/api/service-requests` | Authenticated | Create a service request |
-| `GET` | `/api/service-requests` | Authenticated | List requests; guests receive only their own |
-| `PATCH` | `/api/service-requests/:id/status` | Staff roles | Update a service request status |
+| `POST /api/service-requests` | `guestId` | Required | JSON body; UUID of an existing guest |
+|  | `roomId` | Optional | JSON body; UUID of an existing room |
+|  | `type` | Required | JSON body; non-empty string |
+|  | `description` | Optional | JSON body; string |
+| `GET /api/service-requests` | None | — | No body, path parameter, or query parameter |
+| `PATCH /api/service-requests/:id/status` | `id` | Required | URL path parameter; UUID |
+|  | `status` | Required | JSON body; `OPEN`, `IN_PROGRESS`, `RESOLVED`, or `CLOSED` |
+
+Create request example:
+
+```json
+{
+  "guestId": "<existing-guest-uuid>",
+  "roomId": "<existing-room-uuid>",
+  "type": "Extra towels",
+  "description": "Please bring two extra towels."
+}
+```
+
+Status update example:
+
+```json
+{
+  "status": "IN_PROGRESS"
+}
+```
 
 Service request status values:
 
@@ -255,12 +394,35 @@ CLOSED
 
 ### Staff
 
-| Method | Route | Access | Description |
+All staff-management endpoints require an `ADMIN` bearer token.
+
+| Method and route | Input | Required? | Source and validation |
 |---|---|---|---|
-| `GET` | `/api/staff` | `ADMIN` | List staff |
-| `POST` | `/api/staff` | `ADMIN` | Create staff |
-| `PATCH` | `/api/staff/:id/role` | `ADMIN` | Update a staff role |
-| `DELETE` | `/api/staff/:id` | `ADMIN` | Delete a staff account |
+| `GET /api/staff` | None | — | No body, path parameter, or query parameter; `ADMIN` only |
+| `POST /api/staff` | `email` | Required | JSON body; valid email; `ADMIN` only |
+|  | `password` | Required | JSON body; at least 8 characters |
+|  | `role` | Required | JSON body; `ADMIN`, `STAFF`, or `RECEPTIONIST` |
+| `PATCH /api/staff/:id/role` | `id` | Required | URL path parameter; UUID |
+|  | `role` | Required | JSON body; `ADMIN`, `STAFF`, or `RECEPTIONIST` |
+| `DELETE /api/staff/:id` | `id` | Required | URL path parameter; UUID |
+
+Create staff example:
+
+```json
+{
+  "email": "staff@example.com",
+  "password": "StrongPass123!",
+  "role": "STAFF"
+}
+```
+
+Role update example:
+
+```json
+{
+  "role": "RECEPTIONIST"
+}
+```
 
 Staff role values:
 
@@ -366,7 +528,7 @@ The application currently uses a simple Nodemailer transport and sends a welcome
 
 - Use a strong, unique `JWT_SECRET`.
 - Set `CORS_ORIGIN` explicitly in production.
-- Keep Paystack and Supabase secret keys server-side.
+- Keep Paystack and storage-provider credentials server-side.
 - Add the Paystack webhook URL to the Paystack dashboard.
 - Replace seed credentials before deployment.
 - Terminate HTTPS at a reverse proxy or hosting platform in production.

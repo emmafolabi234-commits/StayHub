@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
-    "@supabase/supabase-js": "^2.39.1",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -27,8 +26,7 @@
     "morgan": "^1.12.1",
     "nodemailer": "^10.6.1",
     "prisma": "^5.10.0",
-    "swagger-ui-express": "^5.0.1",
-    "uuid": "^9.0.0"
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "eslint": "^8.56.0",
