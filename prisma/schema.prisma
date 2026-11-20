@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Guest {
+  id             String   @id @default(uuid())
+  firstName      String
+  lastName       String
+  email          String   @unique
+  phone          String?
+  address        String?
+  loyaltyPoints  Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  bookings       Booking[]
+  serviceRequests ServiceRequest[]
+}
+
+model Staff {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  RECEPTIONIST
+}
+
+model Room {
+  id          String   @id @default(uuid())
+  roomNumber  String   @unique
+  type        String
+  capacity    Int
+  pricePerNightInt Int   // price in minor currency unit (e.g., cents)
+  status      RoomStatus @default(AVAILABLE)
+  bookings    Booking[]
+  serviceRequests ServiceRequest[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum RoomStatus {
+  AVAILABLE
+  MAINTENANCE
+  OCCUPIED
+}
+
+model Booking {
+  id               String   @id @default(uuid())
+  guest            Guest    @relation(fields: [guestId], references: [id])
+  guestId          String
+  room             Room     @relation(fields: [roomId], references: [id])
+  roomId           String
+  checkIn          DateTime
+  checkOut         DateTime
+  status           BookingStatus @default(PENDING)
+  totalAmountInt   Int      // stored in minor units
+  payment          Payment?
+  promoCode        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Prevent overlapping active bookings for the same room
+  @@unique([roomId, checkIn, checkOut])
+  @@index([roomId, checkIn, checkOut])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  booking           Booking @relation(fields: [bookingId], references: [id])
+  bookingId         String   @unique
+  paystackReference String   @unique
+  amountInt         Int      // minor units
+  status            PaymentStatus @default(PENDING)
+  webhookPayload    Json?
+  createdAt         DateTime @default(now())
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model ServiceRequest {
+  id          String   @id @default(uuid())
+  guest       Guest    @relation(fields: [guestId], references: [id])
+  guestId     String
+  room        Room?    @relation(fields: [roomId], references: [id])
+  roomId      String?
+  type        String
+  description String?
+  status      ServiceRequestStatus @default(OPEN)
+  requestedAt DateTime @default(now())
+  resolvedAt  DateTime?
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}

@@ -1,0 +1,133 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "StayHub Backend API",
+    "version": "1.0.0",
+    "description": "Auto‑generated OpenAPI spec for the StayHub digital guest experience platform backend. All endpoints are protected by JWT auth except public guest registration."
+  },
+  "servers": [{"url": "http://localhost:3000/api"}],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Guest": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "firstName": {"type": "string"},
+          "lastName": {"type": "string"},
+          "email": {"type": "string", "format": "email"},
+          "phone": {"type": "string"},
+          "address": {"type": "string"},
+          "loyaltyPoints": {"type": "integer"},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Room": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "roomNumber": {"type": "string"},
+          "type": {"type": "string"},
+          "capacity": {"type": "integer"},
+          "pricePerNightInt": {"type": "integer"},
+          "status": {"type": "string", "enum": ["AVAILABLE","MAINTENANCE","OCCUPIED"]}
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "guestId": {"type": "string", "format": "uuid"},
+          "roomId": {"type": "string", "format": "uuid"},
+          "checkIn": {"type": "string", "format": "date-time"},
+          "checkOut": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["PENDING","CONFIRMED","CANCELLED","COMPLETED"]},
+          "totalAmountInt": {"type": "integer"},
+          "promoCode": {"type": "string"}
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "bookingId": {"type": "string", "format": "uuid"},
+          "paystackReference": {"type": "string"},
+          "amountInt": {"type": "integer"},
+          "status": {"type": "string", "enum": ["PENDING","SUCCESS","FAILED"]}
+        }
+      },
+      "ServiceRequest": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "guestId": {"type": "string", "format": "uuid"},
+          "roomId": {"type": "string", "format": "uuid"},
+          "type": {"type": "string"},
+          "description": {"type": "string"},
+          "status": {"type": "string", "enum": ["OPEN","IN_PROGRESS","RESOLVED","CLOSED"]},
+          "requestedAt": {"type": "string", "format": "date-time"},
+          "resolvedAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Staff": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "email": {"type": "string", "format": "email"},
+          "role": {"type": "string", "enum": ["ADMIN","STAFF","RECEPTIONIST"]},
+          "createdAt": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  },
+  "security": [{"bearerAuth": []}],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Register a staff/admin account",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"email": {"type": "string"}, "password": {"type": "string"}, "role": {"type": "string"}}}}}},
+        "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"type": "object", "properties": {"accessToken": {"type": "string"}, "refreshToken": {"type": "string"}}}}}}}
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login staff",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"email": {"type": "string"}, "password": {"type": "string"}}}}}},
+        "responses": {"200": {"description": "Tokens", "content": {"application/json": {"schema": {"type": "object", "properties": {"accessToken": {"type": "string"}, "refreshToken": {"type": "string"}}}}}}}
+      }
+    },
+    "/guests": {
+      "post": {"summary": "Create guest profile (public)", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Guest"}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Guest"}}}}}}
+    },
+    "/guests/{id}": {
+      "get": {"summary": "Get guest profile", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Guest", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Guest"}}}}}},
+      "put": {"summary": "Update guest profile", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Guest"}}}}, "responses": {"200": {"description": "Updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Guest"}}}}}}
+    },
+    "/rooms": {
+      "get": {"summary": "List rooms (optional availability query)", "parameters": [{"name": "checkIn", "in": "query", "schema": {"type": "string", "format": "date"}}, {"name": "checkOut", "in": "query", "schema": {"type": "string", "format": "date"}}], "responses": {"200": {"description": "Array of rooms", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Room"}}}}}}},
+      "post": {"summary": "Create room (admin only)", "security": [{"bearerAuth": []}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Room"}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Room"}}}}}}
+    },
+    "/bookings": {
+      "post": {"summary": "Create booking", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Booking"}}}}, "responses": {"201": {"description": "Booking created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Booking"}}}}}},
+      "get": {"summary": "List bookings (admin only) – not implemented in demo"}
+    },
+    "/payments/initiate": {
+      "post": {"summary": "Initiate Paystack payment", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"bookingId": {"type": "string"}}}}}}, "responses": {"200": {"description": "Payment URL", "content": {"application/json": {"schema": {"type": "object", "properties": {"authorizationUrl": {"type": "string"}, "reference": {"type": "string"}}}}}}}}
+    },
+    "/service-requests": {
+      "post": {"summary": "Create service request", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequest"}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequest"}}}}}},
+      "get": {"summary": "List service requests", "responses": {"200": {"description": "Array", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/ServiceRequest"}}}}}}}
+    },
+    "/staff": {
+      "get": {"summary": "List staff (admin only)", "responses": {"200": {"description": "Array", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Staff"}}}}}}},
+      "post": {"summary": "Create staff (admin only)", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Staff"}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Staff"}}}}}}
+    }
+  }
+}
